@@ -1,5 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+// expo-secure-store is not available on web; fall back to AsyncStorage
+let SecureStore = null;
+if (Platform.OS !== 'web') {
+  SecureStore = require('expo-secure-store');
+}
 
 const KEYS = {
   API_KEY: 'healthify_api_key',
@@ -15,18 +21,21 @@ const KEYS = {
 export const StorageService = {
   async getApiKey() {
     try {
-      return await SecureStore.getItemAsync(KEYS.API_KEY);
+      if (SecureStore) return await SecureStore.getItemAsync(KEYS.API_KEY);
+      return await AsyncStorage.getItem(KEYS.API_KEY);
     } catch {
       return null;
     }
   },
 
   async setApiKey(key) {
-    await SecureStore.setItemAsync(KEYS.API_KEY, key);
+    if (SecureStore) return await SecureStore.setItemAsync(KEYS.API_KEY, key);
+    await AsyncStorage.setItem(KEYS.API_KEY, key);
   },
 
   async deleteApiKey() {
-    await SecureStore.deleteItemAsync(KEYS.API_KEY);
+    if (SecureStore) return await SecureStore.deleteItemAsync(KEYS.API_KEY);
+    await AsyncStorage.removeItem(KEYS.API_KEY);
   },
 
   async getUserProfile() {
@@ -147,7 +156,7 @@ export const StorageService = {
   async clearAll() {
     await this.clearUserData();
     try {
-      await SecureStore.deleteItemAsync(KEYS.API_KEY);
+      await this.deleteApiKey();
     } catch { /* ignore */ }
   },
 };
