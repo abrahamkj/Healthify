@@ -9,7 +9,6 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,28 +21,39 @@ export default function ApiKeyScreen({ navigation }) {
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
   const [showKey, setShowKey] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   async function handleContinue() {
     const trimmed = apiKey.trim();
-    if (!trimmed || !trimmed.startsWith('sk-ant-')) {
-      Alert.alert('Invalid Key', 'Please enter a valid Anthropic API key (starts with sk-ant-).');
+    setErrorMsg('');
+
+    if (!trimmed) {
+      setErrorMsg('Please enter your Anthropic API key.');
+      return;
+    }
+    if (!trimmed.startsWith('sk-ant-')) {
+      setErrorMsg('API key must start with "sk-ant-". Check that you copied it correctly.');
       return;
     }
 
     setLoading(true);
     try {
-      const valid = await AIService.validateApiKey(trimmed);
-      if (!valid) {
-        Alert.alert('Invalid Key', 'Could not authenticate with this API key. Please check and try again.');
-        return;
+      const result = await AIService.validateApiKey(trimmed);
+      if (result.valid) {
+        await StorageService.setApiKey(trimmed);
+        navigation.replace('Onboarding');
+      } else {
+        setErrorMsg(result.error || 'API key rejected by Anthropic. Please check and try again.');
       }
-      await StorageService.setApiKey(trimmed);
-      navigation.replace('Onboarding');
     } catch (e) {
-      Alert.alert('Error', 'Failed to validate key. Check your internet connection.');
+      setErrorMsg(`Connection failed: ${e.message}. Check your internet connection.`);
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleSkip() {
+    navigation.replace('Onboarding', { skipAI: true });
   }
 
   return (
@@ -52,14 +62,8 @@ export default function ApiKeyScreen({ navigation }) {
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-        >
-          <LinearGradient
-            colors={['#1E3A5F', colors.bg]}
-            style={styles.headerGradient}
-          >
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+          <LinearGradient colors={['#1E3A5F', colors.bg]} style={styles.headerGradient}>
             <View style={styles.logoContainer}>
               <Ionicons name="leaf" size={52} color={colors.primary} />
               <Text style={styles.appName}>Healthify</Text>
@@ -70,26 +74,26 @@ export default function ApiKeyScreen({ navigation }) {
           <View style={styles.content}>
             <Text style={styles.title}>Get Started</Text>
             <Text style={styles.subtitle}>
-              Healthify uses Claude AI to build a personalized diet plan and home
-              exercise routine just for you. Enter your Anthropic API key to begin.
+              Healthify uses Claude AI to build a personalized diet plan and home exercise routine.
+              Enter your Anthropic API key to enable AI features.
             </Text>
 
             <View style={styles.infoCard}>
               <Ionicons name="information-circle" size={20} color={colors.primary} />
               <Text style={styles.infoText}>
-                Your API key is stored securely on your device only. Get a free key at{' '}
+                Your key is stored securely on your device only. Get one free at{' '}
                 <Text style={styles.link}>console.anthropic.com</Text>
               </Text>
             </View>
 
             <Text style={styles.label}>Anthropic API Key</Text>
-            <View style={styles.inputRow}>
+            <View style={[styles.inputRow, errorMsg ? styles.inputError : null]}>
               <TextInput
                 style={styles.input}
                 placeholder="sk-ant-api03-..."
                 placeholderTextColor={colors.textMuted}
                 value={apiKey}
-                onChangeText={setApiKey}
+                onChangeText={v => { setApiKey(v); setErrorMsg(''); }}
                 secureTextEntry={!showKey}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -104,6 +108,14 @@ export default function ApiKeyScreen({ navigation }) {
               </TouchableOpacity>
             </View>
 
+            {/* Error box */}
+            {errorMsg ? (
+              <View style={styles.errorCard}>
+                <Ionicons name="alert-circle" size={18} color={colors.danger} />
+                <Text style={styles.errorText}>{errorMsg}</Text>
+              </View>
+            ) : null}
+
             <TouchableOpacity
               style={[styles.btn, loading && styles.btnDisabled]}
               onPress={handleContinue}
@@ -111,13 +123,21 @@ export default function ApiKeyScreen({ navigation }) {
               activeOpacity={0.8}
             >
               {loading ? (
-                <ActivityIndicator color={colors.bg} />
+                <>
+                  <ActivityIndicator color={colors.bg} />
+                  <Text style={styles.btnText}>Validating key…</Text>
+                </>
               ) : (
                 <>
                   <Text style={styles.btnText}>Validate & Continue</Text>
                   <Ionicons name="arrow-forward" size={20} color={colors.bg} />
                 </>
               )}
+            </TouchableOpacity>
+
+            {/* Skip option */}
+            <TouchableOpacity style={styles.skipBtn} onPress={handleSkip} activeOpacity={0.7}>
+              <Text style={styles.skipText}>Skip for now — explore without AI</Text>
             </TouchableOpacity>
 
             <View style={styles.steps}>
@@ -153,17 +173,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoContainer: { alignItems: 'center', gap: spacing.sm },
-  appName: {
-    fontSize: fontSize.xxxl,
-    fontWeight: '800',
-    color: colors.text,
-    letterSpacing: 1,
-  },
-  tagline: {
-    fontSize: fontSize.md,
-    color: colors.textSub,
-    marginTop: spacing.xs,
-  },
+  appName: { fontSize: fontSize.xxxl, fontWeight: '800', color: colors.text, letterSpacing: 1 },
+  tagline: { fontSize: fontSize.md, color: colors.textSub, marginTop: spacing.xs },
   content: {
     flex: 1,
     padding: spacing.lg,
@@ -172,19 +183,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
   },
-  title: {
-    fontSize: fontSize.xl,
-    fontWeight: '700',
-    color: colors.text,
-    marginBottom: spacing.sm,
-    marginTop: spacing.md,
-  },
-  subtitle: {
-    fontSize: fontSize.md,
-    color: colors.textSub,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-  },
+  title: { fontSize: fontSize.xl, fontWeight: '700', color: colors.text, marginBottom: spacing.sm, marginTop: spacing.md },
+  subtitle: { fontSize: fontSize.md, color: colors.textSub, lineHeight: 22, marginBottom: spacing.lg },
   infoCard: {
     flexDirection: 'row',
     backgroundColor: 'rgba(56,189,248,0.1)',
@@ -195,12 +195,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(56,189,248,0.2)',
   },
-  infoText: {
-    flex: 1,
-    fontSize: fontSize.sm,
-    color: colors.textSub,
-    lineHeight: 20,
-  },
+  infoText: { flex: 1, fontSize: fontSize.sm, color: colors.textSub, lineHeight: 20 },
   link: { color: colors.primary, fontWeight: '600' },
   label: {
     fontSize: fontSize.sm,
@@ -217,8 +212,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.sm,
   },
+  inputError: { borderColor: colors.danger },
   input: {
     flex: 1,
     padding: spacing.md,
@@ -227,6 +223,18 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   eyeBtn: { padding: spacing.md },
+  errorCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    backgroundColor: 'rgba(248,113,113,0.12)',
+    borderRadius: radius.md,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(248,113,113,0.3)',
+    marginBottom: spacing.md,
+  },
+  errorText: { flex: 1, fontSize: fontSize.sm, color: colors.danger, lineHeight: 20 },
   btn: {
     backgroundColor: colors.primary,
     borderRadius: radius.md,
@@ -235,43 +243,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
   },
-  btnDisabled: { opacity: 0.6 },
-  btnText: {
-    fontSize: fontSize.md,
-    fontWeight: '700',
-    color: colors.bg,
-  },
-  steps: {
-    backgroundColor: colors.bgCard,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  stepsTitle: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  stepRow: {
-    flexDirection: 'row',
+  btnDisabled: { opacity: 0.7 },
+  btnText: { fontSize: fontSize.md, fontWeight: '700', color: colors.bg },
+  skipBtn: {
     alignItems: 'center',
-    gap: spacing.md,
+    paddingVertical: spacing.md,
+    marginBottom: spacing.lg,
   },
+  skipText: { fontSize: fontSize.sm, color: colors.textMuted, textDecorationLine: 'underline' },
+  steps: { backgroundColor: colors.bgCard, borderRadius: radius.md, padding: spacing.md, gap: spacing.md },
+  stepsTitle: { fontSize: fontSize.md, fontWeight: '600', color: colors.text, marginBottom: spacing.xs },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   stepIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
+    width: 36, height: 36, borderRadius: radius.full,
     backgroundColor: 'rgba(56,189,248,0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'center', alignItems: 'center',
   },
-  stepText: {
-    flex: 1,
-    fontSize: fontSize.sm,
-    color: colors.textSub,
-    lineHeight: 20,
-  },
+  stepText: { flex: 1, fontSize: fontSize.sm, color: colors.textSub, lineHeight: 20 },
 });

@@ -21,7 +21,21 @@ import { AIService } from '../services/aiService';
 
 const UNIT_OPTIONS = ['Metric (kg, cm)', 'Imperial (lbs, ft/in)'];
 
-export default function OnboardingScreen({ navigation }) {
+const PRESET_QUESTIONS = [
+  { id: 'q1', text: 'What is your current weight?', type: 'number', unit: 'kg', placeholder: 'e.g. 70' },
+  { id: 'q2', text: 'What is your height?', type: 'number', unit: 'cm', placeholder: 'e.g. 170' },
+  { id: 'q3', text: 'How old are you?', type: 'number', unit: 'years', placeholder: 'e.g. 28' },
+  { id: 'q4', text: 'What is your target weight?', type: 'number', unit: 'kg', placeholder: 'e.g. 60' },
+  { id: 'q5', text: 'What is your primary health goal?', type: 'single_choice', options: ['Weight Loss', 'Build Muscle', 'Stay Fit', 'Improve Energy', 'Manage Health Condition'] },
+  { id: 'q6', text: 'What is your dietary preference?', type: 'single_choice', options: ['No Restriction', 'Vegetarian', 'Vegan', 'Non-Vegetarian', 'Gluten Free'] },
+  { id: 'q7', text: 'What is your current activity level?', type: 'single_choice', options: ['Sedentary (desk job)', 'Lightly Active', 'Moderately Active', 'Very Active'] },
+  { id: 'q8', text: 'Any foods you want to avoid?', type: 'multi_choice', options: ['Dairy', 'Nuts', 'Eggs', 'Seafood', 'Gluten', 'Soy', 'None'] },
+  { id: 'q9', text: 'Any medical conditions we should consider?', type: 'multi_choice', options: ['Diabetes', 'Hypertension', 'High Cholesterol', 'Thyroid Issues', 'None'] },
+  { id: 'q10', text: 'How many hours do you sleep per night?', type: 'single_choice', options: ['Less than 5', '5-6 hours', '7-8 hours', 'More than 8'] },
+];
+
+export default function OnboardingScreen({ navigation, route }) {
+  const skipAI = route?.params?.skipAI === true;
   const [stage, setStage] = useState('loading'); // loading | unit | questions | generating
   const [unitSystem, setUnitSystem] = useState('metric');
   const [questions, setQuestions] = useState([]);
@@ -30,6 +44,7 @@ export default function OnboardingScreen({ navigation }) {
   const [textValue, setTextValue] = useState('');
   const [selectedOptions, setSelectedOptions] = useState([]);
   const [progressMsg, setProgressMsg] = useState('');
+  const [loadError, setLoadError] = useState('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -38,15 +53,27 @@ export default function OnboardingScreen({ navigation }) {
   }, []);
 
   async function loadQuestions() {
+    setLoadError('');
+    if (skipAI) {
+      setQuestions(PRESET_QUESTIONS);
+      setStage('unit');
+      return;
+    }
     try {
       const apiKey = await StorageService.getApiKey();
+      if (!apiKey) {
+        setQuestions(PRESET_QUESTIONS);
+        setStage('unit');
+        return;
+      }
       const result = await AIService.generateOnboardingQuestions(apiKey);
       setQuestions(result.questions);
       setStage('unit');
     } catch (e) {
-      Alert.alert('Error', 'Failed to load questions. Check your internet connection.', [
-        { text: 'Retry', onPress: loadQuestions },
-      ]);
+      const msg = e.message || 'Unknown error';
+      setLoadError(msg);
+      setQuestions(PRESET_QUESTIONS);
+      setStage('unit');
     }
   }
 
@@ -139,32 +166,39 @@ export default function OnboardingScreen({ navigation }) {
   }
 
   async function finishOnboarding(allAnswers) {
+    const profile = buildProfile(allAnswers, questions, unitSystem);
+    await StorageService.setOnboardingAnswers(allAnswers);
+    await StorageService.setUserProfile(profile);
+
+    const apiKey = await StorageService.getApiKey();
+    if (!apiKey || skipAI) {
+      // No API key — go to app; plans can be generated later from Settings
+      navigation.replace('Main');
+      return;
+    }
+
     setStage('generating');
     try {
-      const apiKey = await StorageService.getApiKey();
-      const wUnit = unitSystem === 'metric' ? 'kg' : 'lbs';
-      const hUnit = unitSystem === 'metric' ? 'cm' : 'inches';
-
-      const profile = buildProfile(allAnswers, questions, unitSystem);
-      await StorageService.setOnboardingAnswers(allAnswers);
-      await StorageService.setUserProfile(profile);
-
       const { dietPlan, exercisePlan } = await AIService.generateHealthPlans(
         apiKey,
         profile,
         unitSystem,
         msg => setProgressMsg(msg),
       );
-
       await StorageService.setDietPlan(dietPlan);
       await StorageService.setExercisePlan(exercisePlan);
       await StorageService.setLastPlanDate(new Date().toISOString().split('T')[0]);
-
       navigation.replace('Main');
     } catch (e) {
-      Alert.alert('Error', `Failed to generate your plan: ${e.message}`, [
-        { text: 'Retry', onPress: () => finishOnboarding(allAnswers) },
-      ]);
+      const msg = e.message || 'Unknown error';
+      Alert.alert(
+        'Plan Generation Failed',
+        `Could not generate your plan:\n\n${msg}\n\nYou can still explore the app and retry from Settings.`,
+        [
+          { text: 'Go to App', onPress: () => navigation.replace('Main') },
+          { text: 'Retry', onPress: () => finishOnboarding(allAnswers) },
+        ],
+      );
       setStage('questions');
     }
   }

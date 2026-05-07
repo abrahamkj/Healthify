@@ -38,8 +38,11 @@ async function callClaude(apiKey, prompt, maxTokens = 2000) {
 export const AIService = {
   async validateApiKey(apiKey) {
     try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
       const response = await fetch(API_URL, {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': apiKey,
@@ -51,9 +54,22 @@ export const AIService = {
           messages: [{ role: 'user', content: 'Hi' }],
         }),
       });
-      return response.ok;
-    } catch {
-      return false;
+      clearTimeout(timeout);
+
+      if (response.ok) return { valid: true };
+
+      const body = await response.json().catch(() => ({}));
+      const msg = body?.error?.message || `HTTP ${response.status}`;
+
+      if (response.status === 401) return { valid: false, error: `Invalid API key: ${msg}` };
+      if (response.status === 403) return { valid: false, error: `Access denied: ${msg}` };
+      if (response.status === 429) return { valid: false, error: 'Rate limit hit. Wait a moment and try again.' };
+      return { valid: false, error: `Anthropic error (${response.status}): ${msg}` };
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        return { valid: false, error: 'Request timed out after 10 seconds. Check your internet connection.' };
+      }
+      throw e;
     }
   },
 
