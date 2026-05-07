@@ -2,6 +2,13 @@ const API_URL = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
 const MODEL = 'claude-sonnet-4-6';
 
+// Required for browser (web) environments; harmless on native
+const BASE_HEADERS = {
+  'Content-Type': 'application/json',
+  'anthropic-version': API_VERSION,
+  'anthropic-dangerous-direct-browser-access': 'true',
+};
+
 function extractJSON(text) {
   const blockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (blockMatch) return blockMatch[1].trim();
@@ -14,11 +21,7 @@ function extractJSON(text) {
 async function callClaude(apiKey, prompt, maxTokens = 2000) {
   const response = await fetch(API_URL, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': API_VERSION,
-    },
+    headers: { ...BASE_HEADERS, 'x-api-key': apiKey },
     body: JSON.stringify({
       model: MODEL,
       max_tokens: maxTokens,
@@ -43,11 +46,7 @@ export const AIService = {
       const response = await fetch(API_URL, {
         method: 'POST',
         signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': API_VERSION,
-        },
+        headers: { ...BASE_HEADERS, 'x-api-key': apiKey },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
           max_tokens: 5,
