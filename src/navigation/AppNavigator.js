@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { createRef, useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -15,6 +15,9 @@ import DietPlanScreen from '../screens/DietPlanScreen';
 import ExerciseScreen from '../screens/ExerciseScreen';
 import WeightTrackerScreen from '../screens/WeightTrackerScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+
+// Exported ref so any screen can reset the root navigator directly
+export const rootNavigationRef = createRef();
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -96,7 +99,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
+    <NavigationContainer ref={rootNavigationRef} theme={navTheme}>
       <Stack.Navigator
         initialRouteName={initialRoute}
         screenOptions={{ headerShown: false, animation: 'fade' }}

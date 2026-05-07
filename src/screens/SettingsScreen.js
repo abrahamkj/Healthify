@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation, CommonActions } from '@react-navigation/native';
+import { rootNavigationRef } from '../navigation/AppNavigator';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../theme';
 import { StorageService } from '../services/storageService';
@@ -87,8 +88,7 @@ export default function SettingsScreen() {
         style: 'destructive',
         onPress: async () => {
           await StorageService.clearAll();
-          // Navigate to root stack's ApiKey screen
-          navigation.dispatch(
+          rootNavigationRef.current?.dispatch(
             CommonActions.reset({ index: 0, routes: [{ name: 'ApiKey' }] }),
           );
         },
@@ -103,7 +103,7 @@ export default function SettingsScreen() {
         text: 'Continue',
         onPress: async () => {
           await StorageService.deleteApiKey();
-          navigation.dispatch(
+          rootNavigationRef.current?.dispatch(
             CommonActions.reset({ index: 0, routes: [{ name: 'ApiKey' }] }),
           );
         },
