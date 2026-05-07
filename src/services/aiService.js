@@ -9,17 +9,15 @@ const BASE_HEADERS = {
 };
 
 function extractJSON(text) {
-  // Strip markdown fences
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
-  // Find outermost { }
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start !== -1 && end !== -1 && end > start) return text.slice(start, end + 1);
   return text.trim();
 }
 
-async function callClaude(apiKey, prompt, maxTokens = 2000, timeoutMs = 90000) {
+async function callClaude(apiKey, prompt, maxTokens = 2000, timeoutMs = 120000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -37,7 +35,7 @@ async function callClaude(apiKey, prompt, maxTokens = 2000, timeoutMs = 90000) {
     });
   } catch (e) {
     clearTimeout(timer);
-    if (e.name === 'AbortError') throw new Error('Request timed out after 90 seconds. Try again.');
+    if (e.name === 'AbortError') throw new Error('Request timed out. Please try again.');
     throw new Error(`Network error: ${e.message}`);
   }
   clearTimeout(timer);
@@ -53,6 +51,25 @@ async function callClaude(apiKey, prompt, maxTokens = 2000, timeoutMs = 90000) {
   if (!text) throw new Error('Empty response from API.');
   return text;
 }
+
+function parseJSON(text, label) {
+  const json = extractJSON(text);
+  try {
+    return JSON.parse(json);
+  } catch (e) {
+    throw new Error(`${label} parse failed: ${e.message}. Raw: ${json.slice(0, 200)}`);
+  }
+}
+
+const DIET_CONTEXT = (profile, weightUnit) =>
+  `Profile: ${JSON.stringify(profile)}
+RULES: common homely food, under 30 min prep, diet: ${profile.dietaryPreference}, avoid: ${JSON.stringify(profile.foodAvoid)}, goal: ${profile.goal}, weight unit: ${weightUnit}.
+Each meal needs: name, items (array), calories (number), prepTime, instructions.`;
+
+const EXERCISE_CONTEXT = (profile) =>
+  `Profile: ${JSON.stringify(profile)}
+RULES: zero equipment, home only, activity level: ${profile.activityLevel}, conditions: ${JSON.stringify(profile.medicalConditions)}, goal: ${profile.goal}.
+Workout days: 4-6 exercises each with name, sets, reps, restSeconds, description, modification. Rest days: activities array + description.`;
 
 export const AIService = {
   async validateApiKey(apiKey) {
@@ -111,53 +128,81 @@ Questions to generate:
 
   async generateDietPlan(apiKey, userProfile, unitSystem, onProgress) {
     const weightUnit = unitSystem === 'metric' ? 'kg' : 'lbs';
-    onProgress('Creating your 7-day diet plan (this takes ~30 seconds)...');
+    const ctx = DIET_CONTEXT(userProfile, weightUnit);
 
-    const text = await callClaude(
-      apiKey,
-      `Create a full 7-day personalized diet plan for:
-${JSON.stringify(userProfile)}
+    // Part 1: global targets + days 1-4
+    onProgress('Diet plan: generating days 1–4 of 7...');
+    const part1 = parseJSON(
+      await callClaude(apiKey,
+        `Create a personalized diet plan (days 1-4 of a 7-day plan).
+${ctx}
 
-RULES: common homely food only, under 30 min prep, respect diet (${userProfile.dietaryPreference}), avoid ${JSON.stringify(userProfile.foodAvoid)}, goal: ${userProfile.goal}, weight unit: ${weightUnit}.
-
-Return ONLY this JSON structure filled for ALL 7 days:
-{"dailyCalorieTarget":1800,"proteinTarget":"80g","waterIntake":"8 glasses","weeklyPlan":{"day1":{"dayName":"Monday","totalCalories":1750,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[{"name":"","items":[],"calories":0,"instructions":""}]}},"day2":{"dayName":"Tuesday","totalCalories":1760,"meals":{"breakfast":{},"lunch":{},"dinner":{},"snacks":[]}},"day3":{"dayName":"Wednesday","totalCalories":1740,"meals":{"breakfast":{},"lunch":{},"dinner":{},"snacks":[]}},"day4":{"dayName":"Thursday","totalCalories":1770,"meals":{"breakfast":{},"lunch":{},"dinner":{},"snacks":[]}},"day5":{"dayName":"Friday","totalCalories":1750,"meals":{"breakfast":{},"lunch":{},"dinner":{},"snacks":[]}},"day6":{"dayName":"Saturday","totalCalories":1800,"meals":{"breakfast":{},"lunch":{},"dinner":{},"snacks":[]}},"day7":{"dayName":"Sunday","totalCalories":1730,"meals":{"breakfast":{},"lunch":{},"dinner":{},"snacks":[]}}},"tips":["tip1","tip2","tip3"]}
-
-Fill every meal for all 7 days with real food names, items list, calories, prep time, and instructions.`,
-      8192,
+Return ONLY this JSON (fill every field for all 4 days):
+{"dailyCalorieTarget":1800,"proteinTarget":"80g","waterIntake":"8 glasses","tips":["tip1","tip2","tip3"],"weeklyPlan":{"day1":{"dayName":"Monday","totalCalories":1750,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[{"name":"","items":[],"calories":0,"instructions":""}]}},"day2":{"dayName":"Tuesday","totalCalories":1760,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day3":{"dayName":"Wednesday","totalCalories":1740,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day4":{"dayName":"Thursday","totalCalories":1770,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}}}}`,
+        4096,
+      ),
+      'Diet plan part 1',
     );
 
-    const json = extractJSON(text);
-    try {
-      return JSON.parse(json);
-    } catch (e) {
-      throw new Error(`Diet plan JSON parse failed: ${e.message}. Raw: ${json.slice(0, 200)}`);
-    }
+    // Part 2: days 5-7
+    onProgress('Diet plan: generating days 5–7 of 7...');
+    const part2 = parseJSON(
+      await callClaude(apiKey,
+        `Continue the same personalized diet plan (days 5-7 of 7).
+${ctx}
+Daily calorie target: ${part1.dailyCalorieTarget} kcal.
+
+Return ONLY this JSON (fill every field for all 3 days):
+{"weeklyPlan":{"day5":{"dayName":"Friday","totalCalories":1750,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day6":{"dayName":"Saturday","totalCalories":1800,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day7":{"dayName":"Sunday","totalCalories":1730,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}}}}`,
+        3072,
+      ),
+      'Diet plan part 2',
+    );
+
+    return {
+      dailyCalorieTarget: part1.dailyCalorieTarget,
+      proteinTarget: part1.proteinTarget,
+      waterIntake: part1.waterIntake,
+      tips: part1.tips,
+      weeklyPlan: { ...part1.weeklyPlan, ...part2.weeklyPlan },
+    };
   },
 
   async generateExercisePlan(apiKey, userProfile, onProgress) {
-    onProgress('Building your 7-day exercise routine...');
+    const ctx = EXERCISE_CONTEXT(userProfile);
 
-    const text = await callClaude(
-      apiKey,
-      `Create a 7-day home exercise plan for:
-${JSON.stringify(userProfile)}
+    // Part 1: tips + days 1-4
+    onProgress('Exercise plan: generating days 1–4 of 7...');
+    const part1 = parseJSON(
+      await callClaude(apiKey,
+        `Create a home exercise plan (days 1-4 of a 7-day plan, include at least 1 rest day).
+${ctx}
 
-RULES: zero equipment, home only, suitable for ${userProfile.activityLevel}, consider conditions: ${JSON.stringify(userProfile.medicalConditions)}, goal: ${userProfile.goal}, include 2 rest days.
-
-Return ONLY this JSON filled for ALL 7 days:
-{"weeklyPlan":{"day1":{"dayName":"Monday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"5 min warmup description","exercises":[{"name":"Squats","sets":3,"reps":"12","restSeconds":45,"description":"How to do it","modification":"Easier version"}],"cooldown":"5 min cooldown"},"day2":{"dayName":"Tuesday","type":"rest","duration":20,"caloriesBurned":50,"activities":["light walk"],"description":"Rest day description"},"day3":{"dayName":"Wednesday","type":"workout","duration":35,"caloriesBurned":200,"warmup":"","exercises":[],"cooldown":""},"day4":{"dayName":"Thursday","type":"rest","duration":15,"caloriesBurned":40,"activities":[],"description":""},"day5":{"dayName":"Friday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"","exercises":[],"cooldown":""},"day6":{"dayName":"Saturday","type":"workout","duration":40,"caloriesBurned":220,"warmup":"","exercises":[],"cooldown":""},"day7":{"dayName":"Sunday","type":"rest","duration":15,"caloriesBurned":30,"activities":[],"description":""}},"tips":["tip1","tip2"]}
-
-Fill every workout day with 4-6 exercises each with full details. Fill rest days with activities.`,
-      8192,
+Return ONLY this JSON (fill every field):
+{"tips":["tip1","tip2"],"weeklyPlan":{"day1":{"dayName":"Monday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"5 min warmup","exercises":[{"name":"Squats","sets":3,"reps":"12","restSeconds":45,"description":"How to do it","modification":"Easier version"}],"cooldown":"5 min cooldown"},"day2":{"dayName":"Tuesday","type":"rest","duration":20,"caloriesBurned":50,"activities":["light walk"],"description":"Rest day"},"day3":{"dayName":"Wednesday","type":"workout","duration":35,"caloriesBurned":200,"warmup":"","exercises":[],"cooldown":""},"day4":{"dayName":"Thursday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"","exercises":[],"cooldown":""}}}`,
+        4096,
+      ),
+      'Exercise plan part 1',
     );
 
-    const json = extractJSON(text);
-    try {
-      return JSON.parse(json);
-    } catch (e) {
-      throw new Error(`Exercise plan JSON parse failed: ${e.message}. Raw: ${json.slice(0, 200)}`);
-    }
+    // Part 2: days 5-7
+    onProgress('Exercise plan: generating days 5–7 of 7...');
+    const part2 = parseJSON(
+      await callClaude(apiKey,
+        `Continue the same home exercise plan (days 5-7 of 7, include 1 rest day).
+${ctx}
+
+Return ONLY this JSON (fill every field):
+{"weeklyPlan":{"day5":{"dayName":"Friday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"","exercises":[],"cooldown":""},"day6":{"dayName":"Saturday","type":"workout","duration":40,"caloriesBurned":220,"warmup":"","exercises":[],"cooldown":""},"day7":{"dayName":"Sunday","type":"rest","duration":15,"caloriesBurned":30,"activities":[],"description":""}}}`,
+        3072,
+      ),
+      'Exercise plan part 2',
+    );
+
+    return {
+      tips: part1.tips,
+      weeklyPlan: { ...part1.weeklyPlan, ...part2.weeklyPlan },
+    };
   },
 
   async generateHealthPlans(apiKey, userProfile, unitSystem, onProgress) {
