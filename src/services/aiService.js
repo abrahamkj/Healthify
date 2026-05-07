@@ -1,4 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
+const API_URL = 'https://api.anthropic.com/v1/messages';
+const API_VERSION = '2023-06-01';
+const MODEL = 'claude-sonnet-4-6';
 
 function extractJSON(text) {
   const blockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -9,37 +11,56 @@ function extractJSON(text) {
   return text.trim();
 }
 
-function createClient(apiKey) {
-  return new Anthropic({
-    apiKey,
-    dangerouslyAllowBrowser: true,
+async function callClaude(apiKey, prompt, maxTokens = 2000) {
+  const response = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': API_VERSION,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: prompt }],
+    }),
   });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`API error ${response.status}: ${err}`);
+  }
+
+  const data = await response.json();
+  return data.content[0].text;
 }
 
 export const AIService = {
   async validateApiKey(apiKey) {
     try {
-      const client = createClient(apiKey);
-      await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 10,
-        messages: [{ role: 'user', content: 'Hi' }],
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': API_VERSION,
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 5,
+          messages: [{ role: 'user', content: 'Hi' }],
+        }),
       });
-      return true;
+      return response.ok;
     } catch {
       return false;
     }
   },
 
   async generateOnboardingQuestions(apiKey) {
-    const client = createClient(apiKey);
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2000,
-      messages: [
-        {
-          role: 'user',
-          content: `Generate exactly 10 health onboarding questions for a personal health app that will create a custom diet plan and home exercise plan.
+    const text = await callClaude(
+      apiKey,
+      `Generate exactly 10 health onboarding questions for a personal health app that will create a custom diet plan and home exercise plan.
 
 Return ONLY a valid JSON object with NO markdown fences, no explanation:
 {
@@ -54,52 +75,41 @@ Return ONLY a valid JSON object with NO markdown fences, no explanation:
 }
 
 Question types allowed: "number" (numeric input), "text" (free text), "single_choice" (pick one), "multi_choice" (pick many).
-For "number" type, add a "unit" field (e.g. "years", "kg", "lbs", "cm").
-For "number" type, add "placeholder" field.
-For "single_choice"/"multi_choice", add "options" array (2-5 options).
+For "number" type, add a "unit" field (e.g. "years", "kg", "lbs", "cm") and a "placeholder" field.
+For "single_choice"/"multi_choice", add an "options" array with 2-5 choices.
 
-Make these 10 questions:
-1. Current weight (number, will show both kg and lbs pickers based on user preference)
-2. Height (number)
+Make exactly these 10 questions:
+1. Current weight (number, unit: kg)
+2. Height (number, unit: cm)
 3. Age (number, unit: years)
-4. Target weight (number)
+4. Target weight (number, unit: kg)
 5. Primary health goal (single_choice: Weight Loss, Build Muscle, Stay Fit, Improve Energy, Manage Health Condition)
 6. Dietary preference (single_choice: No Restriction, Vegetarian, Vegan, Non-Vegetarian, Gluten Free)
 7. Current activity level (single_choice: Sedentary (desk job), Lightly Active, Moderately Active, Very Active)
 8. Any food allergies or things you avoid (multi_choice: Dairy, Nuts, Eggs, Seafood, Gluten, Soy, None)
 9. Medical conditions to consider (multi_choice: Diabetes, Hypertension, High Cholesterol, Thyroid Issues, None)
 10. How many hours do you sleep per night (single_choice: Less than 5, 5-6 hours, 7-8 hours, More than 8)`,
-        },
-      ],
-    });
-
-    const raw = response.content[0].text;
-    const json = extractJSON(raw);
-    return JSON.parse(json);
+      2000,
+    );
+    return JSON.parse(extractJSON(text));
   },
 
   async generateHealthPlans(apiKey, userProfile, unitSystem, onProgress) {
-    const client = createClient(apiKey);
     const weightUnit = unitSystem === 'metric' ? 'kg' : 'lbs';
-    const heightUnit = unitSystem === 'metric' ? 'cm' : 'inches';
 
     onProgress && onProgress('Crafting your personalized diet plan...');
 
-    const dietResponse = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: `Create a personalized 7-day diet plan based on this health profile:
+    const dietText = await callClaude(
+      apiKey,
+      `Create a personalized 7-day diet plan based on this health profile:
 ${JSON.stringify(userProfile, null, 2)}
 
 RULES:
 - Use ONLY common household/homely food items found in any kitchen
 - Simple preparation under 30 minutes
 - Focus on the user's primary goal: ${userProfile.goal}
-- Strictly respect: dietary preference (${userProfile.dietaryPreference}), avoid: ${JSON.stringify(userProfile.foodAvoid)}
-- Weight unit: ${weightUnit}, height unit: ${heightUnit}
+- Strictly respect dietary preference (${userProfile.dietaryPreference}) and avoid: ${JSON.stringify(userProfile.foodAvoid)}
+- Weight unit: ${weightUnit}
 - Calculate realistic daily calories based on weight, height, age, activity, and goal
 
 Return ONLY valid JSON, no markdown:
@@ -120,15 +130,15 @@ Return ONLY valid JSON, no markdown:
           "instructions": "Boil oats in milk, slice banana on top, drizzle honey."
         },
         "lunch": {
-          "name": "Rice and Dal",
-          "items": ["1 cup cooked rice", "1 cup dal", "1 tbsp ghee", "salad"],
+          "name": "Dal Rice",
+          "items": ["1 cup cooked rice", "1 cup dal", "salad"],
           "calories": 520,
           "prepTime": "20 mins",
-          "instructions": "Cook dal with turmeric and salt. Serve with rice."
+          "instructions": "Cook dal with turmeric. Serve with rice."
         },
         "dinner": {
           "name": "Vegetable Soup",
-          "items": ["mixed vegetables", "1 cup broth", "spices"],
+          "items": ["mixed vegetables", "broth", "spices"],
           "calories": 280,
           "prepTime": "15 mins",
           "instructions": "Boil veggies in broth with spices."
@@ -138,35 +148,30 @@ Return ONLY valid JSON, no markdown:
             "name": "Apple with Peanut Butter",
             "items": ["1 apple", "1 tbsp peanut butter"],
             "calories": 200,
-            "instructions": "Slice apple, dip in peanut butter."
+            "instructions": "Slice apple, serve with peanut butter."
           }
         ]
       }
     },
-    "day2": { "dayName": "Tuesday", "totalCalories": 1760, "meals": {} },
-    "day3": { "dayName": "Wednesday", "totalCalories": 1800, "meals": {} },
-    "day4": { "dayName": "Thursday", "totalCalories": 1750, "meals": {} },
-    "day5": { "dayName": "Friday", "totalCalories": 1790, "meals": {} },
-    "day6": { "dayName": "Saturday", "totalCalories": 1820, "meals": {} },
-    "day7": { "dayName": "Sunday", "totalCalories": 1770, "meals": {} }
+    "day2": { "dayName": "Tuesday", "totalCalories": 1760, "meals": { "breakfast": {}, "lunch": {}, "dinner": {}, "snacks": [] } },
+    "day3": { "dayName": "Wednesday", "totalCalories": 1800, "meals": { "breakfast": {}, "lunch": {}, "dinner": {}, "snacks": [] } },
+    "day4": { "dayName": "Thursday", "totalCalories": 1750, "meals": { "breakfast": {}, "lunch": {}, "dinner": {}, "snacks": [] } },
+    "day5": { "dayName": "Friday", "totalCalories": 1790, "meals": { "breakfast": {}, "lunch": {}, "dinner": {}, "snacks": [] } },
+    "day6": { "dayName": "Saturday", "totalCalories": 1820, "meals": { "breakfast": {}, "lunch": {}, "dinner": {}, "snacks": [] } },
+    "day7": { "dayName": "Sunday", "totalCalories": 1770, "meals": { "breakfast": {}, "lunch": {}, "dinner": {}, "snacks": [] } }
   },
-  "tips": ["Tip 1", "Tip 2", "Tip 3"]
+  "tips": ["Drink water before each meal", "Eat slowly and chew well", "Avoid screens while eating"]
 }
 
 Fill ALL 7 days completely with real meals, items, calories, and instructions.`,
-        },
-      ],
-    });
+      4096,
+    );
 
     onProgress && onProgress('Building your home exercise routine...');
 
-    const exerciseResponse = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 4096,
-      messages: [
-        {
-          role: 'user',
-          content: `Create a personalized 7-day home exercise plan based on this health profile:
+    const exerciseText = await callClaude(
+      apiKey,
+      `Create a personalized 7-day home exercise plan based on this health profile:
 ${JSON.stringify(userProfile, null, 2)}
 
 RULES:
@@ -204,22 +209,23 @@ Return ONLY valid JSON, no markdown:
       "caloriesBurned": 60,
       "activities": ["15-minute brisk walk", "5 minutes stretching"],
       "description": "Active recovery day. Light movement helps reduce soreness."
-    }
+    },
+    "day3": { "dayName": "Wednesday", "type": "workout", "duration": 35, "caloriesBurned": 200, "warmup": "", "exercises": [], "cooldown": "" },
+    "day4": { "dayName": "Thursday", "type": "rest", "duration": 20, "caloriesBurned": 50, "activities": [], "description": "" },
+    "day5": { "dayName": "Friday", "type": "workout", "duration": 30, "caloriesBurned": 180, "warmup": "", "exercises": [], "cooldown": "" },
+    "day6": { "dayName": "Saturday", "type": "workout", "duration": 40, "caloriesBurned": 220, "warmup": "", "exercises": [], "cooldown": "" },
+    "day7": { "dayName": "Sunday", "type": "rest", "duration": 15, "caloriesBurned": 40, "activities": [], "description": "" }
   },
-  "tips": ["Tip 1", "Tip 2"]
+  "tips": ["Stay consistent", "Listen to your body"]
 }
 
-Fill ALL 7 days. Include 2 rest days (type: "rest"). For workout days include 4-6 exercises each.`,
-        },
-      ],
-    });
-
-    const dietJSON = extractJSON(dietResponse.content[0].text);
-    const exerciseJSON = extractJSON(exerciseResponse.content[0].text);
+Fill ALL 7 days. Workout days need 4-6 exercises each with full details.`,
+      4096,
+    );
 
     return {
-      dietPlan: JSON.parse(dietJSON),
-      exercisePlan: JSON.parse(exerciseJSON),
+      dietPlan: JSON.parse(extractJSON(dietText)),
+      exercisePlan: JSON.parse(extractJSON(exerciseText)),
     };
   },
 };

@@ -4,32 +4,24 @@
     "slug": "healthify",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
+    "assetBundlePatterns": ["**/*"],
     "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
       "backgroundColor": "#0F172A"
     },
-    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.healthify.app"
     },
     "android": {
+      "package": "com.healthify.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0F172A"
-      },
-      "package": "com.healthify.app"
+      }
     },
-    "web": {
-      "favicon": "./assets/favicon.png"
-    },
+    "web": {},
     "plugins": [
-      [
-        "expo-secure-store"
-      ]
+      ["expo-secure-store"]
     ]
   }
 }
