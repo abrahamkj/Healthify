@@ -63,7 +63,7 @@ function parseJSON(text, label) {
 
 const DIET_CONTEXT = (profile, weightUnit) =>
   `Profile: ${JSON.stringify(profile)}
-RULES: common homely food, under 30 min prep, diet: ${profile.dietaryPreference}, avoid: ${JSON.stringify(profile.foodAvoid)}, goal: ${profile.goal}, weight unit: ${weightUnit}.
+RULES: common homely food typical to ${profile.location || 'the user\'s region'}, under 30 min prep, diet: ${profile.dietaryPreference}, avoid: ${JSON.stringify(profile.foodAvoid)}, goal: ${profile.goal}, weight unit: ${weightUnit}.
 Each meal needs: name, items (array), calories (number), prepTime, instructions.`;
 
 const EXERCISE_CONTEXT = (profile) =>
@@ -154,7 +154,7 @@ Daily calorie target: ${part1.dailyCalorieTarget} kcal.
 
 Return ONLY this JSON (fill every field for all 3 days):
 {"weeklyPlan":{"day5":{"dayName":"Friday","totalCalories":1750,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day6":{"dayName":"Saturday","totalCalories":1800,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day7":{"dayName":"Sunday","totalCalories":1730,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}}}}`,
-        3072,
+        4096,
       ),
       'Diet plan part 2',
     );
@@ -194,7 +194,7 @@ ${ctx}
 
 Return ONLY this JSON (fill every field):
 {"weeklyPlan":{"day5":{"dayName":"Friday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"","exercises":[],"cooldown":""},"day6":{"dayName":"Saturday","type":"workout","duration":40,"caloriesBurned":220,"warmup":"","exercises":[],"cooldown":""},"day7":{"dayName":"Sunday","type":"rest","duration":15,"caloriesBurned":30,"activities":[],"description":""}}}`,
-        3072,
+        4096,
       ),
       'Exercise plan part 2',
     );

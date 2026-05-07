@@ -18,6 +18,7 @@ const QUESTION_LABELS = {
   q7: 'Activity level', q7a: 'Exercise time available',
   q8: 'Foods to avoid', q9: 'Medical conditions', q9a: 'On medication',
   q10: 'Sleep per night',
+  q11: 'Location / Region',
 };
 
 export default function SettingsScreen() {
@@ -118,6 +119,7 @@ export default function SettingsScreen() {
                 <PRow label="Height" value={profile.height} />
                 <PRow label="Activity" value={profile.activityLevel} />
                 <PRow label="Diet" value={profile.dietaryPreference} />
+                {profile.location && <PRow label="Location" value={profile.location} />}
                 {profile.specificCondition && <PRow label="Condition" value={profile.specificCondition} />}
                 {profile.exerciseTimeAvailable && <PRow label="Exercise time" value={profile.exerciseTimeAvailable} />}
                 {profile.onMedication && <PRow label="Medication" value={profile.onMedication} />}

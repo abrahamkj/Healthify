@@ -24,6 +24,7 @@ const BASE_QUESTIONS = [
   { id: 'q8', text: 'Any foods you want to avoid?', type: 'multi_choice', options: ['Dairy', 'Nuts', 'Eggs', 'Seafood', 'Gluten', 'Soy', 'None'] },
   { id: 'q9', text: 'Any medical conditions we should consider?', type: 'multi_choice', options: ['Diabetes', 'Hypertension', 'High Cholesterol', 'Thyroid Issues', 'None'] },
   { id: 'q10', text: 'How many hours do you sleep per night?', type: 'single_choice', options: ['Less than 5 hours', '5-6 hours', '7-8 hours', 'More than 8 hours'] },
+  { id: 'q11', text: 'Where are you located? (city / state / country)', type: 'text', placeholder: 'e.g. Kerala, India' },
 ];
 
 // Returns extra follow-up questions based on a given answer
@@ -68,6 +69,7 @@ export default function OnboardingScreen({ navigation, route }) {
   const [selectedOptions, setSelectedOptions] = useState([]);
   const [progressMsg, setProgressMsg] = useState('');
   const [genError, setGenError] = useState('');
+  const [validationError, setValidationError] = useState('');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -109,15 +111,16 @@ export default function OnboardingScreen({ navigation, route }) {
   const currentQ = questions[currentIdx];
 
   function handleNext() {
+    setValidationError('');
     let answer;
     if (currentQ.type === 'number' || currentQ.type === 'text') {
-      if (!textValue.trim()) { Alert.alert('Required', 'Please enter a value.'); return; }
+      if (!textValue.trim()) { setValidationError('Please enter a value.'); return; }
       answer = textValue.trim();
     } else if (currentQ.type === 'single_choice') {
-      if (!selectedOptions.length) { Alert.alert('Required', 'Please select an option.'); return; }
+      if (!selectedOptions.length) { setValidationError('Please select an option.'); return; }
       answer = selectedOptions[0];
     } else {
-      if (!selectedOptions.length) { Alert.alert('Required', 'Please select at least one option.'); return; }
+      if (!selectedOptions.length) { setValidationError('Please select at least one option.'); return; }
       answer = selectedOptions;
     }
 
@@ -159,6 +162,7 @@ export default function OnboardingScreen({ navigation, route }) {
   }
 
   function toggleOption(opt) {
+    setValidationError('');
     if (currentQ.type === 'single_choice') { setSelectedOptions([opt]); return; }
     setSelectedOptions(prev => prev.includes(opt) ? prev.filter(o => o !== opt) : [...prev, opt]);
   }
@@ -288,7 +292,7 @@ export default function OnboardingScreen({ navigation, route }) {
                     placeholder={currentQ.placeholder || 'Your answer...'}
                     placeholderTextColor={colors.textMuted}
                     value={textValue}
-                    onChangeText={setTextValue}
+                    onChangeText={v => { setTextValue(v); setValidationError(''); }}
                     keyboardType={currentQ.type === 'number' ? 'decimal-pad' : 'default'}
                     autoFocus
                   />
@@ -329,6 +333,13 @@ export default function OnboardingScreen({ navigation, route }) {
           </Animated.View>
         </ScrollView>
 
+        {validationError ? (
+          <View style={styles.valErrBox}>
+            <Ionicons name="alert-circle-outline" size={15} color={colors.danger} />
+            <Text style={styles.valErrText}>{validationError}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.navRow}>
           <TouchableOpacity style={styles.backBtn} onPress={handleBack}>
             <Ionicons name="arrow-back" size={20} color={colors.textSub} />
@@ -367,6 +378,7 @@ function buildProfile(answers, questions, unitSystem) {
     medicalConditions: map.q9 || ['None'],
     onMedication: map.q9a || null,
     sleepHours: map.q10 || '7-8 hours',
+    location: map.q11 || null,
     rawAnswers: map,
   };
 }
@@ -412,6 +424,8 @@ const styles = StyleSheet.create({
   optionsGrid: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xl },
   unitCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center', gap: spacing.md, borderWidth: 1, borderColor: colors.border },
   unitLabel: { fontSize: fontSize.sm, fontWeight: '600', color: colors.text, textAlign: 'center' },
+  valErrBox: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  valErrText: { fontSize: fontSize.sm, color: colors.danger },
   navRow: { flexDirection: 'row', padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl },
   backBtn: { width: 50, height: 50, borderRadius: radius.full, backgroundColor: colors.bgCard, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border },
   nextBtn: { flex: 1, flexDirection: 'row', backgroundColor: colors.primary, borderRadius: radius.md, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.sm },
