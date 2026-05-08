@@ -63,7 +63,14 @@ function parseJSON(text, label) {
 
 const DIET_CONTEXT = (profile, weightUnit) =>
   `Profile: ${JSON.stringify(profile)}
-RULES: common homely food typical to ${profile.location || 'the user\'s region'}, under 30 min prep, diet: ${profile.dietaryPreference}, avoid: ${JSON.stringify(profile.foodAvoid)}, goal: ${profile.goal}, weight unit: ${weightUnit}.
+RULES:
+- Region: ${profile.location || 'not specified'} — use authentic local homely food from this region
+- Meals per day: ${profile.mealsPerDay || '3 meals'}
+- Max cooking time available: ${profile.cookingTimePerDay || '30 min'}
+- Current water intake: ${profile.currentWaterIntake || 'unknown'} — suggest improvement if low
+- Stress level: ${profile.stressLevel || 'unknown'}${profile.stressEatingHabit ? ` — eating habit: ${profile.stressEatingHabit}` : ''}
+- Diet preference: ${profile.dietaryPreference}, avoid: ${JSON.stringify(profile.foodAvoid)}
+- Goal: ${profile.goal}, weight unit: ${weightUnit}
 Each meal needs: name, items (array), calories (number), prepTime, instructions.`;
 
 const EXERCISE_CONTEXT = (profile) =>

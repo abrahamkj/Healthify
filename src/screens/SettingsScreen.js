@@ -19,6 +19,10 @@ const QUESTION_LABELS = {
   q8: 'Foods to avoid', q9: 'Medical conditions', q9a: 'On medication',
   q10: 'Sleep per night',
   q11: 'Location / Region',
+  q12: 'Meals per day', q12a: 'Reason for skipping',
+  q13: 'Cooking time/day',
+  q14: 'Water intake',
+  q15: 'Stress level', q15a: 'Stress & eating',
 };
 
 export default function SettingsScreen() {

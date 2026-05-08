@@ -14,17 +14,21 @@ import { AIService } from '../services/aiService';
 const UNIT_OPTIONS = ['Metric (kg, cm)', 'Imperial (lbs, ft/in)'];
 
 const BASE_QUESTIONS = [
-  { id: 'q1', text: 'What is your current weight?', type: 'number', unit: 'kg', placeholder: 'e.g. 70' },
-  { id: 'q2', text: 'What is your height?', type: 'number', unit: 'cm', placeholder: 'e.g. 170' },
-  { id: 'q3', text: 'How old are you?', type: 'number', unit: 'years', placeholder: 'e.g. 28' },
-  { id: 'q4', text: 'What is your target weight?', type: 'number', unit: 'kg', placeholder: 'e.g. 60' },
-  { id: 'q5', text: 'What is your primary health goal?', type: 'single_choice', options: ['Weight Loss', 'Build Muscle', 'Stay Fit', 'Improve Energy', 'Manage Health Condition'] },
-  { id: 'q6', text: 'What is your dietary preference?', type: 'single_choice', options: ['No Restriction', 'Vegetarian', 'Vegan', 'Non-Vegetarian', 'Gluten Free'] },
-  { id: 'q7', text: 'What is your current activity level?', type: 'single_choice', options: ['Sedentary (desk job)', 'Lightly Active', 'Moderately Active', 'Very Active'] },
-  { id: 'q8', text: 'Any foods you want to avoid?', type: 'multi_choice', options: ['Dairy', 'Nuts', 'Eggs', 'Seafood', 'Gluten', 'Soy', 'None'] },
-  { id: 'q9', text: 'Any medical conditions we should consider?', type: 'multi_choice', options: ['Diabetes', 'Hypertension', 'High Cholesterol', 'Thyroid Issues', 'None'] },
+  { id: 'q1',  text: 'What is your current weight?', type: 'number', unit: 'kg', placeholder: 'e.g. 70' },
+  { id: 'q2',  text: 'What is your height?', type: 'number', unit: 'cm', placeholder: 'e.g. 170' },
+  { id: 'q3',  text: 'How old are you?', type: 'number', unit: 'years', placeholder: 'e.g. 28' },
+  { id: 'q4',  text: 'What is your target weight?', type: 'number', unit: 'kg', placeholder: 'e.g. 60' },
+  { id: 'q5',  text: 'What is your primary health goal?', type: 'single_choice', options: ['Weight Loss', 'Build Muscle', 'Stay Fit', 'Improve Energy', 'Manage Health Condition'] },
+  { id: 'q6',  text: 'What is your dietary preference?', type: 'single_choice', options: ['No Restriction', 'Vegetarian', 'Vegan', 'Non-Vegetarian', 'Gluten Free'] },
+  { id: 'q7',  text: 'What is your current activity level?', type: 'single_choice', options: ['Sedentary (desk job)', 'Lightly Active', 'Moderately Active', 'Very Active'] },
+  { id: 'q8',  text: 'Any foods you want to avoid?', type: 'multi_choice', options: ['Dairy', 'Nuts', 'Eggs', 'Seafood', 'Gluten', 'Soy', 'None'] },
+  { id: 'q9',  text: 'Any medical conditions we should consider?', type: 'multi_choice', options: ['Diabetes', 'Hypertension', 'High Cholesterol', 'Thyroid Issues', 'None'] },
   { id: 'q10', text: 'How many hours do you sleep per night?', type: 'single_choice', options: ['Less than 5 hours', '5-6 hours', '7-8 hours', 'More than 8 hours'] },
   { id: 'q11', text: 'Where are you located? (city / state / country)', type: 'text', placeholder: 'e.g. Kerala, India' },
+  { id: 'q12', text: 'How many meals do you prefer per day?', type: 'single_choice', options: ['2 large meals', '3 meals', '4–5 small meals', 'I often skip meals'] },
+  { id: 'q13', text: 'How much time can you spend cooking per day?', type: 'single_choice', options: ['Under 20 min', '20–30 min', '30–60 min', 'Over 1 hour'] },
+  { id: 'q14', text: 'How much water do you currently drink per day?', type: 'single_choice', options: ['Less than 4 glasses', '4–6 glasses', '6–8 glasses', 'More than 8 glasses'] },
+  { id: 'q15', text: 'How would you describe your stress level?', type: 'single_choice', options: ['Low', 'Moderate', 'High', 'Very High'] },
 ];
 
 // Returns extra follow-up questions based on a given answer
@@ -55,6 +59,12 @@ function getFollowUps(questionId, answer, unitSystem) {
       extras.push({ id: 'q9a', text: 'Are you currently on medication for your condition?', type: 'single_choice', options: ['Yes, on medication', 'No medication', 'Managing through diet/lifestyle'] });
     }
   }
+  if (questionId === 'q12' && answer === 'I often skip meals') {
+    extras.push({ id: 'q12a', text: 'Why do you skip meals?', type: 'single_choice', options: ['Too busy / no time', 'Not hungry', 'Trying to reduce calories', 'Intermittent fasting'] });
+  }
+  if (questionId === 'q15' && (answer === 'High' || answer === 'Very High')) {
+    extras.push({ id: 'q15a', text: 'How does stress usually affect your eating?', type: 'single_choice', options: ['I overeat / binge', 'I lose my appetite', 'I crave junk food', 'It does not affect much'] });
+  }
   return extras;
 }
 
@@ -76,17 +86,11 @@ export default function OnboardingScreen({ navigation, route }) {
   useEffect(() => { loadQuestions(); }, []);
 
   async function loadQuestions() {
-    if (skipAI) { setQuestions(BASE_QUESTIONS); setStage('unit'); return; }
-    try {
-      const apiKey = await StorageService.getApiKey();
-      if (!apiKey) { setQuestions(BASE_QUESTIONS); setStage('unit'); return; }
-      const result = await AIService.generateOnboardingQuestions(apiKey);
-      setQuestions(result.questions?.length > 0 ? result.questions : BASE_QUESTIONS);
-      setStage('unit');
-    } catch {
-      setQuestions(BASE_QUESTIONS);
-      setStage('unit');
-    }
+    // Always use BASE_QUESTIONS so all 15 questions (including location, meals,
+    // cooking time, water, stress) are guaranteed to show up with correct IDs.
+    // AI question generation was dropping q11+ so we skip it here.
+    setQuestions(BASE_QUESTIONS);
+    setStage('unit');
   }
 
   function animateIn() {
@@ -379,6 +383,12 @@ function buildProfile(answers, questions, unitSystem) {
     onMedication: map.q9a || null,
     sleepHours: map.q10 || '7-8 hours',
     location: map.q11 || null,
+    mealsPerDay: map.q12 || '3 meals',
+    skipMealsReason: map.q12a || null,
+    cookingTimePerDay: map.q13 || '20–30 min',
+    currentWaterIntake: map.q14 || '4–6 glasses',
+    stressLevel: map.q15 || null,
+    stressEatingHabit: map.q15a || null,
     rawAnswers: map,
   };
 }
