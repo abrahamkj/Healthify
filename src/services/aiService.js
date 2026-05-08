@@ -136,34 +136,48 @@ Questions to generate:
   async generateDietPlan(apiKey, userProfile, unitSystem, onProgress) {
     const weightUnit = unitSystem === 'metric' ? 'kg' : 'lbs';
     const ctx = DIET_CONTEXT(userProfile, weightUnit);
+    // Compact single-day template so prompts stay short
+    const D = '{"dayName":"","totalCalories":0,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[{"name":"","items":[],"calories":0,"instructions":""}]}}';
 
-    // Part 1: global targets + days 1-4
-    onProgress('Diet plan: generating days 1–4 of 7...');
+    // Part 1: global settings + days 1-2
+    onProgress('Diet plan: generating days 1–2 of 7...');
     const part1 = parseJSON(
       await callClaude(apiKey,
-        `Create a personalized diet plan (days 1-4 of a 7-day plan).
+        `Personalized diet plan — ONLY days 1 (Monday) and 2 (Tuesday).
 ${ctx}
-
-Return ONLY this JSON (fill every field for all 4 days):
-{"dailyCalorieTarget":1800,"proteinTarget":"80g","waterIntake":"8 glasses","tips":["tip1","tip2","tip3"],"weeklyPlan":{"day1":{"dayName":"Monday","totalCalories":1750,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[{"name":"","items":[],"calories":0,"instructions":""}]}},"day2":{"dayName":"Tuesday","totalCalories":1760,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day3":{"dayName":"Wednesday","totalCalories":1740,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day4":{"dayName":"Thursday","totalCalories":1770,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}}}}`,
-        4096,
+Return ONLY this JSON with both days filled:
+{"dailyCalorieTarget":1800,"proteinTarget":"80g","waterIntake":"8 glasses","tips":["tip1","tip2","tip3"],"weeklyPlan":{"day1":${D},"day2":${D}}}`,
+        2800,
       ),
       'Diet plan part 1',
     );
 
-    // Part 2: days 5-7
-    onProgress('Diet plan: generating days 5–7 of 7...');
+    // Part 2: days 3-4
+    onProgress('Diet plan: generating days 3–4 of 7...');
     const part2 = parseJSON(
       await callClaude(apiKey,
-        `Continue the same personalized diet plan (days 5-7 of 7).
+        `Continue the same diet plan — ONLY days 3 (Wednesday) and 4 (Thursday).
 ${ctx}
 Daily calorie target: ${part1.dailyCalorieTarget} kcal.
-
-Return ONLY this JSON (fill every field for all 3 days):
-{"weeklyPlan":{"day5":{"dayName":"Friday","totalCalories":1750,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day6":{"dayName":"Saturday","totalCalories":1800,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}},"day7":{"dayName":"Sunday","totalCalories":1730,"meals":{"breakfast":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"lunch":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"dinner":{"name":"","items":[],"calories":0,"prepTime":"","instructions":""},"snacks":[]}}}}`,
-        4096,
+Return ONLY this JSON with both days filled:
+{"weeklyPlan":{"day3":${D},"day4":${D}}}`,
+        2800,
       ),
       'Diet plan part 2',
+    );
+
+    // Part 3: days 5-6-7
+    onProgress('Diet plan: generating days 5–7 of 7...');
+    const part3 = parseJSON(
+      await callClaude(apiKey,
+        `Continue the same diet plan — ONLY days 5 (Friday), 6 (Saturday) and 7 (Sunday).
+${ctx}
+Daily calorie target: ${part1.dailyCalorieTarget} kcal.
+Return ONLY this JSON with all 3 days filled:
+{"weeklyPlan":{"day5":${D},"day6":${D},"day7":${D}}}`,
+        3500,
+      ),
+      'Diet plan part 3',
     );
 
     return {
@@ -171,37 +185,37 @@ Return ONLY this JSON (fill every field for all 3 days):
       proteinTarget: part1.proteinTarget,
       waterIntake: part1.waterIntake,
       tips: part1.tips,
-      weeklyPlan: { ...part1.weeklyPlan, ...part2.weeklyPlan },
+      weeklyPlan: { ...part1.weeklyPlan, ...part2.weeklyPlan, ...part3.weeklyPlan },
     };
   },
 
   async generateExercisePlan(apiKey, userProfile, onProgress) {
     const ctx = EXERCISE_CONTEXT(userProfile);
+    const W = '{"dayName":"","type":"workout","duration":30,"caloriesBurned":180,"warmup":"","exercises":[{"name":"","sets":3,"reps":"12","restSeconds":45,"description":"","modification":""}],"cooldown":""}';
+    const R = '{"dayName":"","type":"rest","duration":20,"caloriesBurned":40,"activities":[],"description":""}';
 
-    // Part 1: tips + days 1-4
-    onProgress('Exercise plan: generating days 1–4 of 7...');
+    // Part 1: tips + days 1-3
+    onProgress('Exercise plan: generating days 1–3 of 7...');
     const part1 = parseJSON(
       await callClaude(apiKey,
-        `Create a home exercise plan (days 1-4 of a 7-day plan, include at least 1 rest day).
+        `Home exercise plan — ONLY days 1 (Monday), 2 (Tuesday), 3 (Wednesday). Include 1 rest day among them.
 ${ctx}
-
-Return ONLY this JSON (fill every field):
-{"tips":["tip1","tip2"],"weeklyPlan":{"day1":{"dayName":"Monday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"5 min warmup","exercises":[{"name":"Squats","sets":3,"reps":"12","restSeconds":45,"description":"How to do it","modification":"Easier version"}],"cooldown":"5 min cooldown"},"day2":{"dayName":"Tuesday","type":"rest","duration":20,"caloriesBurned":50,"activities":["light walk"],"description":"Rest day"},"day3":{"dayName":"Wednesday","type":"workout","duration":35,"caloriesBurned":200,"warmup":"","exercises":[],"cooldown":""},"day4":{"dayName":"Thursday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"","exercises":[],"cooldown":""}}}`,
-        4096,
+Return ONLY this JSON:
+{"tips":["tip1","tip2"],"weeklyPlan":{"day1":${W},"day2":${R},"day3":${W}}}`,
+        3000,
       ),
       'Exercise plan part 1',
     );
 
-    // Part 2: days 5-7
-    onProgress('Exercise plan: generating days 5–7 of 7...');
+    // Part 2: days 4-7
+    onProgress('Exercise plan: generating days 4–7 of 7...');
     const part2 = parseJSON(
       await callClaude(apiKey,
-        `Continue the same home exercise plan (days 5-7 of 7, include 1 rest day).
+        `Continue the same home exercise plan — ONLY days 4 (Thursday), 5 (Friday), 6 (Saturday), 7 (Sunday). Include 1 rest day.
 ${ctx}
-
-Return ONLY this JSON (fill every field):
-{"weeklyPlan":{"day5":{"dayName":"Friday","type":"workout","duration":30,"caloriesBurned":180,"warmup":"","exercises":[],"cooldown":""},"day6":{"dayName":"Saturday","type":"workout","duration":40,"caloriesBurned":220,"warmup":"","exercises":[],"cooldown":""},"day7":{"dayName":"Sunday","type":"rest","duration":15,"caloriesBurned":30,"activities":[],"description":""}}}`,
-        4096,
+Return ONLY this JSON:
+{"weeklyPlan":{"day4":${W},"day5":${W},"day6":${W},"day7":${R}}}`,
+        3500,
       ),
       'Exercise plan part 2',
     );
