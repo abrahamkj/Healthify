@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../theme';
 import { StorageService } from '../services/storageService';
+import { HealthKitService } from '../services/healthKitService';
 
 const DAY_KEYS = ['day1', 'day2', 'day3', 'day4', 'day5', 'day6', 'day7'];
 
@@ -120,6 +121,17 @@ export default function ExerciseScreen() {
 }
 
 function WorkoutView({ day }) {
+  const [hkStatus, setHkStatus] = useState('idle'); // idle|saving|saved|error
+
+  async function saveToHealth() {
+    setHkStatus('saving');
+    const ok = await HealthKitService.saveWorkout({
+      durationMinutes: day.duration,
+      caloriesBurned: day.caloriesBurned,
+    });
+    setHkStatus(ok ? 'saved' : 'error');
+  }
+
   return (
     <>
       {/* Summary card */}
@@ -164,6 +176,32 @@ function WorkoutView({ day }) {
           </View>
           <Text style={styles.warmupText}>{day.cooldown}</Text>
         </View>
+      )}
+
+      {/* Save to Apple Health */}
+      {HealthKitService.isAvailable && (
+        <TouchableOpacity
+          style={[
+            styles.hkBtn,
+            hkStatus === 'saved' && styles.hkBtnSaved,
+            hkStatus === 'saving' && styles.hkBtnDisabled,
+          ]}
+          onPress={saveToHealth}
+          disabled={hkStatus === 'saving' || hkStatus === 'saved'}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={hkStatus === 'saved' ? 'checkmark-circle' : 'heart'}
+            size={18}
+            color={hkStatus === 'saved' ? colors.success : '#FF2D55'}
+          />
+          <Text style={[styles.hkBtnText, hkStatus === 'saved' && { color: colors.success }]}>
+            {hkStatus === 'saving' ? 'Saving…'
+              : hkStatus === 'saved' ? 'Saved to Apple Health'
+              : hkStatus === 'error' ? 'Failed — Tap to retry'
+              : 'Save Workout to Apple Health'}
+          </Text>
+        </TouchableOpacity>
       )}
     </>
   );
@@ -448,4 +486,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  hkBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: spacing.sm, borderRadius: radius.md,
+    backgroundColor: 'rgba(255,45,85,0.1)',
+    borderWidth: 1, borderColor: 'rgba(255,45,85,0.25)',
+    padding: spacing.md, marginTop: spacing.sm,
+  },
+  hkBtnSaved: { backgroundColor: 'rgba(74,222,128,0.1)', borderColor: 'rgba(74,222,128,0.25)' },
+  hkBtnDisabled: { opacity: 0.6 },
+  hkBtnText: { fontSize: fontSize.sm, fontWeight: '700', color: '#FF2D55' },
 });

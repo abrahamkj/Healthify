@@ -13,6 +13,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../theme';
 import { StorageService } from '../services/storageService';
+import { HealthKitService } from '../services/healthKitService';
 
 const DAYS = ['day1', 'day2', 'day3', 'day4', 'day5', 'day6', 'day7'];
 
@@ -39,6 +40,8 @@ export default function DashboardScreen({ navigation }) {
   const [weightLog, setWeightLog] = useState([]);
   const [unitSystem, setUnitSystem] = useState('metric');
   const [refreshing, setRefreshing] = useState(false);
+  const [steps, setSteps] = useState(null);
+  const [activeCalories, setActiveCalories] = useState(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -59,6 +62,14 @@ export default function DashboardScreen({ navigation }) {
     setExercisePlan(e);
     setWeightLog(w || []);
     setUnitSystem(u);
+    if (HealthKitService.isAvailable) {
+      const [s, ac] = await Promise.all([
+        HealthKitService.getTodaySteps(),
+        HealthKitService.getTodayActiveCalories(),
+      ]);
+      setSteps(s);
+      setActiveCalories(ac);
+    }
   }
 
   async function onRefresh() {
@@ -130,6 +141,26 @@ export default function DashboardScreen({ navigation }) {
               sub={wUnit}
             />
           </View>
+
+          {/* Apple Health activity row */}
+          {(steps !== null || activeCalories !== null) && (
+            <View style={styles.hkRow}>
+              <Ionicons name="heart" size={14} color="#FF2D55" />
+              <Text style={styles.hkLabel}>From Apple Health  </Text>
+              {steps !== null && (
+                <View style={styles.hkPill}>
+                  <Ionicons name="footsteps-outline" size={13} color={colors.primary} />
+                  <Text style={styles.hkPillText}>{steps.toLocaleString()} steps</Text>
+                </View>
+              )}
+              {activeCalories !== null && (
+                <View style={styles.hkPill}>
+                  <Ionicons name="flame" size={13} color={colors.warning} />
+                  <Text style={styles.hkPillText}>{activeCalories} kcal</Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Today's Diet */}
           <SectionHeader title="Today's Meals" icon="restaurant" onPress={() => navigation.getParent()?.navigate('Diet')} />
@@ -411,4 +442,16 @@ const styles = StyleSheet.create({
   tipText: { flex: 1, fontSize: fontSize.sm, color: colors.textSub, lineHeight: 20 },
   emptyCard: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   emptyText: { fontSize: fontSize.sm, color: colors.textMuted, textAlign: 'center' },
+  hkRow: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm,
+    backgroundColor: colors.bgCard, borderRadius: radius.md,
+    padding: spacing.sm, paddingHorizontal: spacing.md,
+  },
+  hkLabel: { fontSize: fontSize.xs, color: colors.textMuted },
+  hkPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: colors.bgCardAlt, borderRadius: radius.full,
+    paddingHorizontal: spacing.sm, paddingVertical: 3,
+  },
+  hkPillText: { fontSize: fontSize.xs, color: colors.text, fontWeight: '600' },
 });

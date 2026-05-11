@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '../theme';
 import { StorageService } from '../services/storageService';
+import { HealthKitService } from '../services/healthKitService';
 import WeightChart from '../components/WeightChart';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -27,6 +28,8 @@ export default function WeightTrackerScreen() {
   const [unitSystem, setUnitSystem] = useState('metric');
   const [inputWeight, setInputWeight] = useState('');
   const [logging, setLogging] = useState(false);
+  const [hkWeight, setHkWeight] = useState(null);   // latest from Apple Health
+  const [hkStatus, setHkStatus] = useState('idle'); // idle|saving|saved|error
   const inputRef = useRef(null);
 
   useFocusEffect(
@@ -44,6 +47,11 @@ export default function WeightTrackerScreen() {
     setWeightLog(log || []);
     setProfile(p);
     setUnitSystem(u);
+    // Load latest Apple Health weight (iOS only)
+    if (HealthKitService.isAvailable) {
+      const hw = await HealthKitService.getLatestWeight(u);
+      setHkWeight(hw);
+    }
   }
 
   const wUnit = unitSystem === 'metric' ? 'kg' : 'lbs';
@@ -72,20 +80,29 @@ export default function WeightTrackerScreen() {
 
   async function logWeight() {
     const val = parseFloat(inputWeight);
-    if (isNaN(val) || val <= 0) {
-      Alert.alert('Invalid', 'Please enter a valid weight.');
-      return;
-    }
-    if (val > 500 || val < 20) {
-      Alert.alert('Invalid', `Weight seems out of range. Please enter in ${wUnit}.`);
-      return;
-    }
+    if (isNaN(val) || val <= 0 || val > 500 || val < 20) return;
     setLogging(true);
     const updated = await StorageService.addWeightEntry(val, wUnit);
     setWeightLog(updated);
     setInputWeight('');
     setLogging(false);
     inputRef.current?.blur();
+    // Mirror to Apple Health
+    if (HealthKitService.isAvailable) {
+      setHkStatus('saving');
+      const kg = wUnit === 'kg' ? val : val / 2.20462;
+      const ok = await HealthKitService.saveWeight(kg);
+      setHkStatus(ok ? 'saved' : 'error');
+    }
+  }
+
+  async function importFromHealth() {
+    if (!hkWeight) return;
+    setLogging(true);
+    const updated = await StorageService.addWeightEntry(hkWeight.value, wUnit);
+    setWeightLog(updated);
+    setHkWeight(null);
+    setLogging(false);
   }
 
   async function deleteEntry(date) {
@@ -123,8 +140,34 @@ export default function WeightTrackerScreen() {
           {/* Log input */}
           <View style={styles.logCard}>
             <Text style={styles.logLabel}>
-              {loggedToday ? 'Update Today\'s Weight' : 'Log Today\'s Weight'}
+              {loggedToday ? "Update Today's Weight" : "Log Today's Weight"}
             </Text>
+
+            {/* Apple Health banner — show if Health has a reading not yet imported */}
+            {hkWeight && (
+              <TouchableOpacity style={styles.hkBanner} onPress={importFromHealth} activeOpacity={0.8}>
+                <Ionicons name="heart" size={16} color="#FF2D55" />
+                <Text style={styles.hkBannerText}>
+                  Apple Health: <Text style={styles.hkBannerVal}>{hkWeight.value} {wUnit}</Text>
+                </Text>
+                <Text style={styles.hkImport}>Import →</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Sync status after logging */}
+            {hkStatus === 'saved' && (
+              <View style={styles.hkStatusRow}>
+                <Ionicons name="checkmark-circle" size={14} color={colors.success} />
+                <Text style={styles.hkStatusText}>Saved to Apple Health</Text>
+              </View>
+            )}
+            {hkStatus === 'error' && (
+              <View style={styles.hkStatusRow}>
+                <Ionicons name="alert-circle-outline" size={14} color={colors.danger} />
+                <Text style={[styles.hkStatusText, { color: colors.danger }]}>Could not save to Apple Health</Text>
+              </View>
+            )}
+
             <View style={styles.inputRow}>
               <TextInput
                 ref={inputRef}
@@ -363,4 +406,14 @@ const styles = StyleSheet.create({
   historyWeight: { fontSize: fontSize.md, fontWeight: '700', color: colors.text, marginRight: spacing.sm },
   historyUnit: { fontSize: fontSize.xs, fontWeight: '400', color: colors.textMuted },
   deleteBtn: { padding: spacing.xs },
+  hkBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: 'rgba(255,45,85,0.1)', borderRadius: radius.sm,
+    padding: spacing.sm, borderWidth: 1, borderColor: 'rgba(255,45,85,0.2)',
+  },
+  hkBannerText: { flex: 1, fontSize: fontSize.sm, color: colors.text },
+  hkBannerVal: { fontWeight: '700', color: '#FF2D55' },
+  hkImport: { fontSize: fontSize.sm, color: '#FF2D55', fontWeight: '700' },
+  hkStatusRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  hkStatusText: { fontSize: fontSize.xs, color: colors.success },
 });
